@@ -312,12 +312,11 @@ fn detect_project_id(dir: &Path) -> Result<String> {
     if let Ok(output) = std::process::Command::new("git")
         .args(["-C", &dir.to_string_lossy(), "remote", "get-url", "origin"])
         .output()
+        && output.status.success()
     {
-        if output.status.success() {
-            let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !url.is_empty() {
-                return Ok(hash_str(&url));
-            }
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !url.is_empty() {
+            return Ok(hash_str(&url));
         }
     }
 
