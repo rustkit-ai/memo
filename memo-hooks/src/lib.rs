@@ -75,14 +75,20 @@ impl InjectBlock {
 }
 
 pub struct SetupResult {
-    pub hook_installed: bool,
+    pub claude_hook_installed: bool,
+    pub cursor_rules_written: bool,
 }
 
 pub fn setup(project_dir: &Path) -> Result<SetupResult> {
+    // Claude Code
     write_instructions_to_claude_md(project_dir)?;
     write_to_claude_md(&InjectBlock::empty(), project_dir)?;
-    let hook_installed = install_stop_hook(project_dir)?;
-    Ok(SetupResult { hook_installed })
+    let claude_hook_installed = install_stop_hook(project_dir)?;
+
+    // Cursor
+    let cursor_rules_written = write_cursor_rules(project_dir)?;
+
+    Ok(SetupResult { claude_hook_installed, cursor_rules_written })
 }
 
 pub fn write_to_claude_md(block: &InjectBlock, project_dir: &Path) -> Result<()> {
@@ -94,15 +100,36 @@ pub fn write_to_claude_md(block: &InjectBlock, project_dir: &Path) -> Result<()>
     )
 }
 
+const MEMO_INSTRUCTIONS: &str = "\
+- Run `memo inject` at the start of every session to recall context\n\
+- Run `memo log \"<what you did>\"` after each significant task\n\
+- Run `memo log \"todo: <next step>\"` before ending the session\n";
+
+fn write_cursor_rules(project_dir: &Path) -> Result<bool> {
+    let rules_dir = project_dir.join(".cursor").join("rules");
+    let rules_path = rules_dir.join("memo.mdc");
+
+    if rules_path.exists() {
+        return Ok(false);
+    }
+
+    fs::create_dir_all(&rules_dir)?;
+    fs::write(
+        &rules_path,
+        format!(
+            "---\ndescription: memo persistent memory instructions\nalwaysApply: true\n---\n\n\
+             ## memo — persistent agent memory\n{MEMO_INSTRUCTIONS}"
+        ),
+    )?;
+    Ok(true)
+}
+
 fn write_instructions_to_claude_md(project_dir: &Path) -> Result<()> {
     patch_markdown_section(
         &project_dir.join("CLAUDE.md"),
         "<!-- memo:instructions:start -->",
         "<!-- memo:instructions:end -->",
-        "## memo — persistent agent memory\n\
-         - Run `memo log \"<what you did>\"` after each significant task\n\
-         - Run `memo log \"todo: <next step>\"` before ending the session\n\
-         - Run `memo inject` at the start of a session to recall context\n",
+        &format!("## memo — persistent agent memory\n{MEMO_INSTRUCTIONS}"),
     )
 }
 

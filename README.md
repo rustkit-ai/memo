@@ -10,7 +10,7 @@
 
 **Stop starting every AI session from zero.**
 
-`memo` gives AI agents like Claude Code, Cursor, and Aider a persistent memory across sessions. One binary, zero dependencies, works in any project.
+`memo` gives AI agents like Claude Code and Cursor a persistent memory across sessions. One binary, zero dependencies, works in any project.
 
 ```
 $ memo inject
@@ -51,7 +51,7 @@ brew install memo
 
 ---
 
-## How a session works with Claude Code
+## How a session works
 
 ### 1. One-time setup
 
@@ -61,24 +61,27 @@ Run this once in your project:
 memo setup
 ```
 
-This does two things:
-- Writes agent instructions into `CLAUDE.md` so Claude knows to use memo
-- Installs a **Stop hook** in `.claude/settings.json` that runs `memo inject --claude` automatically when Claude finishes a session
+`memo setup` configures both **Claude Code** and **Cursor** automatically:
+
+| | What it does |
+|---|---|
+| **Claude Code** | Writes instructions into `CLAUDE.md` + installs a Stop hook in `.claude/settings.json` so context refreshes automatically at end of every session |
+| **Cursor** | Writes `.cursor/rules/memo.mdc` with `alwaysApply: true` so Cursor picks up the instructions on every session |
 
 You never have to think about it again.
 
 ---
 
-### 2. Work with Claude normally
+### 2. Work normally
 
-Open Claude Code and work as usual — ask questions, implement features, fix bugs. Claude will log what it does using `memo log` as it goes, following the instructions in `CLAUDE.md`.
+Open Claude Code or Cursor and work as usual. The agent logs what it does using `memo log` as it goes.
 
 ```
 You: implement the password reset flow
 
-Claude: [works on the feature]
-        memo log "implemented password reset: email token, 1h expiry, bcrypt hash"
-        memo log "todo: add rate limiting on /reset endpoint"
+Agent: [works on the feature]
+       memo log "implemented password reset: email token, 1h expiry, bcrypt hash"
+       memo log "todo: add rate limiting on /reset endpoint"
 ```
 
 ---
@@ -150,11 +153,11 @@ No re-exploration. No repeated questions. Claude picks up exactly where it left 
 
 ## With any other agent
 
-Add this to your `CLAUDE.md` / `AGENTS.md` / system prompt:
+Add this to your rules file or system prompt:
 
 ```markdown
-## Memory
-- Run `memo inject` at the start of every session
+## memo — persistent agent memory
+- Run `memo inject` at the start of every session to recall context
 - Run `memo log "<what you did>"` after each significant task
 - Run `memo log "todo: <next step>"` before ending the session
 ```

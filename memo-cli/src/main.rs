@@ -224,11 +224,16 @@ fn main() -> Result<()> {
         Command::Setup => {
             let result = setup(&dir)?;
             println!("✓ CLAUDE.md updated with memo instructions and context block");
-            if result.hook_installed {
+            if result.claude_hook_installed {
                 println!("✓ Stop hook installed in .claude/settings.json");
-                println!("  → memo inject --claude will run automatically at end of each session");
+                println!("  → memo inject --claude will run automatically at end of each Claude Code session");
             } else {
-                println!("  Stop hook already present, skipped");
+                println!("  Claude Code Stop hook already present, skipped");
+            }
+            if result.cursor_rules_written {
+                println!("✓ Cursor rules written to .cursor/rules/memo.mdc");
+            } else {
+                println!("  Cursor rules already present, skipped");
             }
             println!();
             println!("Run `memo log \"<message>\"` to start logging.");
