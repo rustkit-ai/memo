@@ -18,15 +18,20 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
+            strip_cmd: strip
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use_cross: true
+            strip_cmd: aarch64-linux-gnu-strip
+            apt_packages: binutils-aarch64-linux-gnu
           - target: x86_64-apple-darwin
             os: macos-latest
             use_cross: false
+            strip_cmd: strip
           - target: aarch64-apple-darwin
             os: macos-latest
             use_cross: false
+            strip_cmd: strip
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use_cross: false
@@ -42,6 +47,10 @@ jobs:
       - name: Install cross
         if: matrix.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install apt packages
+        if: matrix.apt_packages != ''
+        run: sudo apt-get install -y ${{ matrix.apt_packages }}
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -63,12 +72,7 @@ jobs:
 
       - name: Strip binary (unix)
         if: runner.os != 'Windows'
-        run: |
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
-            llvm-strip target/${{ matrix.target }}/release/memo
-          else
-            strip target/${{ matrix.target }}/release/memo
-          fi
+        run: ${{ matrix.strip_cmd }} target/${{ matrix.target }}/release/memo
 
       - name: Package (unix)
         if: runner.os != 'Windows'
