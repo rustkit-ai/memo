@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build (${{ matrix.target }})
@@ -76,11 +79,14 @@ jobs:
           cd target/${{ matrix.target }}/release
           Compress-Archive -Path memo.exe -DestinationPath $env:GITHUB_WORKSPACE/memo-${{ matrix.target }}.zip
 
-      - name: Upload to GitHub Release
+      - name: Upload to GitHub Release (unix)
+        if: runner.os != 'Windows'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            memo-${{ matrix.target }}.tar.gz
-            memo-${{ matrix.target }}.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          files: memo-${{ matrix.target }}.tar.gz
+
+      - name: Upload to GitHub Release (windows)
+        if: runner.os == 'Windows'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: memo-${{ matrix.target }}.zip
