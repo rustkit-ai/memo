@@ -42,7 +42,7 @@ recent tags: bug · refactor · auth
 
 **cargo:**
 ```sh
-cargo install memo
+cargo install memo-agent
 ```
 
 **curl (Linux/macOS):**
