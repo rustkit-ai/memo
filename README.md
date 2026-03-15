@@ -1,5 +1,9 @@
 # memo — Persistent memory for AI coding agents
 
+[![CI](https://github.com/rustkit-ai/memo/actions/workflows/ci.yml/badge.svg)](https://github.com/rustkit-ai/memo/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/memo-agent.svg)](https://crates.io/crates/memo-agent)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Stop starting every AI session from zero.**
 
 `memo` gives AI agents like Claude Code, Cursor, and Aider a persistent memory across sessions. One binary, zero dependencies, works in any project.

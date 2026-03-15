@@ -41,8 +41,6 @@ echo "Downloading memo for ${TARGET}..."
 # Determine install location
 if [ -w /usr/local/bin ]; then
     INSTALL_DIR="/usr/local/bin"
-elif [ -w "$HOME/.local/bin" ]; then
-    INSTALL_DIR="$HOME/.local/bin"
 else
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
@@ -66,12 +64,12 @@ install -m 755 "$TMP_DIR/$BIN" "$INSTALL_DIR/$BIN"
 
 echo "memo installed to $INSTALL_DIR/memo"
 
-# Remind user to add to PATH if using ~/.local/bin
+# Remind user to add to PATH if needed
 case ":${PATH}:" in
     *":$INSTALL_DIR:"*) ;;
     *)
         echo ""
-        echo "Note: add the following to your shell profile to use memo:"
+        echo "Add memo to your PATH:"
         echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
         ;;
 esac
