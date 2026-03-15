@@ -63,7 +63,12 @@ jobs:
 
       - name: Strip binary (unix)
         if: runner.os != 'Windows'
-        run: strip target/${{ matrix.target }}/release/memo
+        run: |
+          if [ "${{ matrix.use_cross }}" = "true" ]; then
+            llvm-strip target/${{ matrix.target }}/release/memo
+          else
+            strip target/${{ matrix.target }}/release/memo
+          fi
 
       - name: Package (unix)
         if: runner.os != 'Windows'

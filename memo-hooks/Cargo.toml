@@ -1,7 +1,10 @@
 [package]
 name = "memo-hooks"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+description = "CLAUDE.md injection hooks for memo, persistent memory for AI coding agents"
 
 [dependencies]
 memo-core = { path = "../memo-core" }

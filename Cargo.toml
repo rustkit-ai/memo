@@ -2,6 +2,12 @@
 members = ["memo-core", "memo-hooks", "memo-cli"]
 resolver = "2"
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/rustkit-ai/memo"
+license = "MIT"
+
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.31", features = ["bundled"] }

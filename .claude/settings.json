@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "memo inject --claude",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
