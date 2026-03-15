@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use memo_core::Store;
+use clap::{Parser, Subcommand, ValueEnum};
+use memo_core::{Entry, Store};
 use memo_hooks::{setup, write_to_claude_md, InjectBlock};
+use std::io::Read;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -26,7 +27,6 @@ enum Command {
 
     /// Search memory entries
     Search {
-        /// Query string to search for in entry content
         query: String,
     },
 
@@ -36,9 +36,8 @@ enum Command {
         #[arg(long)]
         claude: bool,
 
-        /// Output format
-        #[arg(long, value_name = "FORMAT", default_value = "text")]
-        format: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
 
         /// Limit to entries newer than this duration (e.g. 1d, 7d, 24h, 1w)
         #[arg(long, value_name = "DURATION")]
@@ -57,17 +56,13 @@ enum Command {
     },
 
     /// Delete a memory entry by id
-    Delete {
-        /// Entry ID to delete
-        id: i64,
-    },
+    Delete { id: i64 },
 
     /// List all tags with usage counts
     Tags,
 
     /// Clear all memory for current project
     Clear {
-        /// Skip confirmation prompt
         #[arg(long, short = 'y')]
         yes: bool,
     },
@@ -79,34 +74,36 @@ enum Command {
     Setup,
 }
 
+#[derive(Clone, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
 fn project_dir() -> Result<PathBuf> {
     std::env::current_dir().context("cannot determine current directory")
 }
 
-/// Parse duration strings like "1d", "7d", "24h", "1w" into chrono::Duration.
 fn parse_duration(s: &str) -> Result<chrono::Duration> {
-    if let Some(num_str) = s.strip_suffix('d') {
-        let days: i64 = num_str
-            .parse()
-            .with_context(|| format!("invalid duration: {}", s))?;
-        return Ok(chrono::Duration::days(days));
+    let (num_str, unit) = s.split_at(s.len().saturating_sub(1));
+    let n: i64 = num_str
+        .parse()
+        .with_context(|| format!("invalid duration: {s}"))?;
+    match unit {
+        "d" => Ok(chrono::Duration::days(n)),
+        "h" => Ok(chrono::Duration::hours(n)),
+        "w" => Ok(chrono::Duration::weeks(n)),
+        _ => anyhow::bail!("invalid duration format '{s}': use e.g. 1d, 7d, 24h, 1w"),
     }
-    if let Some(num_str) = s.strip_suffix('h') {
-        let hours: i64 = num_str
-            .parse()
-            .with_context(|| format!("invalid duration: {}", s))?;
-        return Ok(chrono::Duration::hours(hours));
-    }
-    if let Some(num_str) = s.strip_suffix('w') {
-        let weeks: i64 = num_str
-            .parse()
-            .with_context(|| format!("invalid duration: {}", s))?;
-        return Ok(chrono::Duration::weeks(weeks));
-    }
-    anyhow::bail!(
-        "invalid duration format '{}': use e.g. 1d, 7d, 24h, 1w",
-        s
-    )
+}
+
+fn print_entry(e: &Entry) {
+    let tags = if e.tags.is_empty() {
+        String::new()
+    } else {
+        format!(" [{}]", e.tags.join(", "))
+    };
+    println!("#{} {} — {}{}", e.id, e.timestamp.format("%Y-%m-%d %H:%M"), e.content, tags);
 }
 
 fn main() -> Result<()> {
@@ -119,7 +116,7 @@ fn main() -> Result<()> {
             println!("memo initialized for project {}", &store.project_id[..8]);
             println!("db: ~/.local/share/memo/{}.db", store.project_id);
             println!();
-            println!("Add the following to your project's CLAUDE.md to auto-inject context:");
+            println!("Add the following to your project's CLAUDE.md:");
             println!();
             println!("```");
             println!("<!-- memo:start -->");
@@ -131,7 +128,6 @@ fn main() -> Result<()> {
 
         Command::Log { message, tag } => {
             let message = if message == "-" {
-                use std::io::Read;
                 let mut buf = String::new();
                 std::io::stdin()
                     .read_to_string(&mut buf)
@@ -144,26 +140,23 @@ fn main() -> Result<()> {
             };
             let store = Store::open(&dir)?;
             store.save(&message, &tag)?;
-            println!("logged: {}", message);
+            println!("logged: {message}");
         }
 
         Command::Inject { claude, format, since } => {
             let store = Store::open(&dir)?;
-            let block = if let Some(since_str) = since {
-                let duration = parse_duration(&since_str)?;
-                let since_dt = chrono::Utc::now() - duration;
-                InjectBlock::build_since(&store, since_dt)?
-            } else {
-                InjectBlock::build(&store)?
+            let block = match since {
+                Some(s) => InjectBlock::build_since(&store, chrono::Utc::now() - parse_duration(&s)?)?,
+                None => InjectBlock::build(&store)?,
             };
 
             if claude {
                 write_to_claude_md(&block, &dir)?;
                 println!("memo context written to CLAUDE.md");
             } else {
-                match format.as_str() {
-                    "json" => println!("{}", block.render_json()?),
-                    _ => print!("{}", block.render_text()),
+                match format {
+                    OutputFormat::Json => println!("{}", block.render_json()?),
+                    OutputFormat::Text => print!("{}", block.render_text()),
                 }
             }
         }
@@ -171,34 +164,24 @@ fn main() -> Result<()> {
         Command::List { all, tag } => {
             let store = Store::open(&dir)?;
             let limit = if all { None } else { Some(10) };
-            let entries = if let Some(t) = tag {
-                store.list_by_tag(&t, limit)?
-            } else {
-                store.list(limit)?
+            let entries = match tag {
+                Some(t) => store.list_by_tag(&t, limit)?,
+                None => store.list(limit)?,
             };
 
             if entries.is_empty() {
                 println!("no entries yet. run `memo log \"<message>\"` to save one.");
                 return Ok(());
             }
-
-            for entry in &entries {
-                let date = entry.timestamp.format("%Y-%m-%d %H:%M");
-                let tags = if entry.tags.is_empty() {
-                    String::new()
-                } else {
-                    format!(" [{}]", entry.tags.join(", "))
-                };
-                println!("#{} {} — {}{}", entry.id, date, entry.content, tags);
-            }
+            entries.iter().for_each(print_entry);
         }
 
         Command::Delete { id } => {
             let store = Store::open(&dir)?;
             if store.delete(id)? {
-                println!("deleted entry #{}", id);
+                println!("deleted entry #{id}");
             } else {
-                println!("entry #{} not found", id);
+                println!("entry #{id} not found");
             }
         }
 
@@ -210,28 +193,18 @@ fn main() -> Result<()> {
                 return Ok(());
             }
             for (tag, count) in &tags {
-                println!("{:<20} {}", tag, count);
+                println!("{tag:<20} {count}");
             }
         }
 
         Command::Search { query } => {
             let store = Store::open(&dir)?;
             let entries = store.search(&query)?;
-
             if entries.is_empty() {
-                println!("no entries found for query: {}", query);
+                println!("no entries found for query: {query}");
                 return Ok(());
             }
-
-            for entry in &entries {
-                let date = entry.timestamp.format("%Y-%m-%d %H:%M");
-                let tags = if entry.tags.is_empty() {
-                    String::new()
-                } else {
-                    format!(" [{}]", entry.tags.join(", "))
-                };
-                println!("#{} {} — {}{}", entry.id, date, entry.content, tags);
-            }
+            entries.iter().for_each(print_entry);
         }
 
         Command::Clear { yes } => {
@@ -245,8 +218,7 @@ fn main() -> Result<()> {
                 }
             }
             let store = Store::open(&dir)?;
-            let n = store.clear()?;
-            println!("cleared {} entries", n);
+            println!("cleared {} entries", store.clear()?);
         }
 
         Command::Setup => {
@@ -264,16 +236,12 @@ fn main() -> Result<()> {
 
         Command::Stats => {
             let store = Store::open(&dir)?;
-            let count = store.count()?;
-            let tags = store.recent_tags(20)?;
             let block = InjectBlock::build(&store)?;
-            // Rough token estimate: chars in inject block / 4
-            let tokens_saved = block.render_text().len() / 4;
             println!("project:      {}", &store.project_id[..8]);
-            println!("entries:      {}", count);
-            println!("tokens saved: ~{}", tokens_saved);
-            if !tags.is_empty() {
-                println!("top tags:     {}", tags.join(", "));
+            println!("entries:      {}", block.entry_count);
+            println!("tokens saved: ~{}", block.render_text().len() / 4);
+            if !block.recent_tags.is_empty() {
+                println!("top tags:     {}", block.recent_tags.join(", "));
             }
         }
     }

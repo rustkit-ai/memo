@@ -1,6 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use memo_core::{Entry, Store};
+use std::fs;
 use std::path::Path;
 
 pub struct InjectBlock {
@@ -12,48 +13,44 @@ pub struct InjectBlock {
 
 impl InjectBlock {
     pub fn build(store: &Store) -> Result<Self> {
-        let entries = store.list(Some(20))?;
-        Self::from_entries(store, entries)
+        Self::from_store(store, store.list(Some(20))?)
     }
 
     pub fn build_since(store: &Store, since: DateTime<Utc>) -> Result<Self> {
-        let entries = store.list_since(since, Some(20))?;
-        Self::from_entries(store, entries)
+        Self::from_store(store, store.list_since(since, Some(20))?)
     }
 
-    fn from_entries(store: &Store, entries: Vec<Entry>) -> Result<Self> {
-        let last_entry = entries.first().cloned();
-        let todos = entries
-            .iter()
-            .filter(|e| e.content.starts_with("todo:") || e.content.starts_with("TODO:"))
-            .cloned()
-            .collect();
-        let recent_tags = store.recent_tags(10)?;
-        let entry_count = store.count()?;
+    fn from_store(store: &Store, entries: Vec<Entry>) -> Result<Self> {
         Ok(Self {
-            last_entry,
-            todos,
-            recent_tags,
-            entry_count,
+            last_entry: entries.first().cloned(),
+            todos: entries
+                .iter()
+                .filter(|e| e.content.to_ascii_lowercase().starts_with("todo:"))
+                .cloned()
+                .collect(),
+            recent_tags: store.recent_tags(10)?,
+            entry_count: store.count()?,
         })
     }
 
     pub fn render_text(&self) -> String {
+        use std::fmt::Write;
         let mut out = String::from("## memo context\n");
 
-        if let Some(e) = &self.last_entry {
-            let date = e.timestamp.format("%Y-%m-%d");
-            out.push_str(&format!("last: {} — \"{}\"\n", date, e.content));
-        } else {
-            out.push_str("last: (no entries yet)\n");
+        match &self.last_entry {
+            Some(e) => writeln!(out, "last: {} — \"{}\"", e.timestamp.format("%Y-%m-%d"), e.content).unwrap(),
+            None => out.push_str("last: (no entries yet)\n"),
         }
 
         for todo in &self.todos {
-            out.push_str(&format!("todo: {}\n", todo.content.trim_start_matches("todo:").trim_start_matches("TODO:").trim()));
+            let text = todo.content
+                .trim_start_matches(|c: char| c.is_ascii_alphabetic() || c == ':')
+                .trim();
+            writeln!(out, "todo: {text}").unwrap();
         }
 
         if !self.recent_tags.is_empty() {
-            out.push_str(&format!("recent tags: {}\n", self.recent_tags.join(" · ")));
+            writeln!(out, "recent tags: {}", self.recent_tags.join(" · ")).unwrap();
         }
 
         out
@@ -77,151 +74,107 @@ impl InjectBlock {
     }
 }
 
-const INSTRUCTIONS_START: &str = "<!-- memo:instructions:start -->";
-const INSTRUCTIONS_END: &str = "<!-- memo:instructions:end -->";
-
-const INSTRUCTIONS_BODY: &str = "\
-## memo — persistent agent memory
-- Run `memo log \"<what you did>\"` after each significant task
-- Run `memo log \"todo: <next step>\"` before ending the session
-- Run `memo inject` at the start of a session to recall context
-";
-
-pub fn setup(project_dir: &Path) -> Result<SetupResult> {
-    // 1. Write instructions + context block into CLAUDE.md
-    write_instructions_to_claude_md(project_dir)?;
-    let block = InjectBlock {
-        last_entry: None,
-        todos: vec![],
-        recent_tags: vec![],
-        entry_count: 0,
-    };
-    write_to_claude_md(&block, project_dir)?;
-
-    // 2. Install Stop hook into .claude/settings.json
-    let hook_installed = install_stop_hook(project_dir)?;
-
-    Ok(SetupResult { hook_installed })
-}
-
 pub struct SetupResult {
     pub hook_installed: bool,
 }
 
+pub fn setup(project_dir: &Path) -> Result<SetupResult> {
+    write_instructions_to_claude_md(project_dir)?;
+    write_to_claude_md(&InjectBlock::empty(), project_dir)?;
+    let hook_installed = install_stop_hook(project_dir)?;
+    Ok(SetupResult { hook_installed })
+}
+
+pub fn write_to_claude_md(block: &InjectBlock, project_dir: &Path) -> Result<()> {
+    patch_markdown_section(
+        &project_dir.join("CLAUDE.md"),
+        "<!-- memo:start -->",
+        "<!-- memo:end -->",
+        &block.render_text(),
+    )
+}
+
 fn write_instructions_to_claude_md(project_dir: &Path) -> Result<()> {
-    let claude_md = project_dir.join("CLAUDE.md");
+    patch_markdown_section(
+        &project_dir.join("CLAUDE.md"),
+        "<!-- memo:instructions:start -->",
+        "<!-- memo:instructions:end -->",
+        "## memo — persistent agent memory\n\
+         - Run `memo log \"<what you did>\"` after each significant task\n\
+         - Run `memo log \"todo: <next step>\"` before ending the session\n\
+         - Run `memo inject` at the start of a session to recall context\n",
+    )
+}
 
-    let section = format!(
-        "{}\n{}{}\n",
-        INSTRUCTIONS_START, INSTRUCTIONS_BODY, INSTRUCTIONS_END
-    );
+/// Replace or prepend a delimited section in a Markdown file.
+/// The section is identified by `start` and `end` HTML comment markers.
+/// If the file doesn't exist it is created. If the section doesn't exist it is prepended.
+fn patch_markdown_section(path: &Path, start: &str, end: &str, content: &str) -> Result<()> {
+    let existing = if path.exists() { fs::read_to_string(path)? } else { String::new() };
+    let section = format!("{start}\n{content}{end}\n");
 
-    let existing = if claude_md.exists() {
-        std::fs::read_to_string(&claude_md)?
+    let new_content = if let Some(s) = existing.find(start) {
+        let e = existing.find(end).map(|i| i + end.len()).unwrap_or(existing.len());
+        format!("{}{}{}", &existing[..s], section, &existing[e..])
     } else {
-        String::new()
+        format!("{section}\n{existing}")
     };
 
-    let new_content = if existing.contains(INSTRUCTIONS_START) {
-        let start = existing.find(INSTRUCTIONS_START).unwrap();
-        let end = existing
-            .find(INSTRUCTIONS_END)
-            .map(|i| i + INSTRUCTIONS_END.len())
-            .unwrap_or(existing.len());
-        format!("{}{}{}", &existing[..start], section, &existing[end..])
-    } else {
-        format!("{}\n{}", section, existing)
-    };
-
-    std::fs::write(&claude_md, new_content)?;
+    fs::write(path, new_content)?;
     Ok(())
 }
 
 fn install_stop_hook(project_dir: &Path) -> Result<bool> {
     let claude_dir = project_dir.join(".claude");
-    std::fs::create_dir_all(&claude_dir)?;
+    fs::create_dir_all(&claude_dir)?;
     let settings_path = claude_dir.join("settings.json");
 
     let mut root: serde_json::Value = if settings_path.exists() {
-        let content = std::fs::read_to_string(&settings_path)?;
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
+        serde_json::from_str(&fs::read_to_string(&settings_path)?).unwrap_or(serde_json::json!({}))
     } else {
         serde_json::json!({})
     };
+
+    // Check if memo inject hook is already installed
+    let already_installed = root
+        .get("hooks")
+        .and_then(|h| h.get("Stop"))
+        .and_then(|s| s.as_array())
+        .is_some_and(|stop_hooks| {
+            stop_hooks.iter().any(|h| {
+                h.get("hooks")
+                    .and_then(|hs| hs.as_array())
+                    .is_some_and(|hs| {
+                        hs.iter().any(|cmd| {
+                            cmd.get("command")
+                                .and_then(|c| c.as_str())
+                                .is_some_and(|s| s.contains("memo inject"))
+                        })
+                    })
+            })
+        });
+
+    if already_installed {
+        return Ok(false);
+    }
 
     let memo_hook = serde_json::json!({
         "hooks": [{ "type": "command", "command": "memo inject --claude" }]
     });
 
-    // Check if our hook is already present
-    let hooks = root
-        .get("hooks")
-        .and_then(|h| h.get("Stop"))
-        .and_then(|s| s.as_array());
-
-    if let Some(stop_hooks) = hooks {
-        let already = stop_hooks.iter().any(|h| {
-            h.get("hooks")
-                .and_then(|hs| hs.as_array())
-                .map(|hs| {
-                    hs.iter().any(|cmd| {
-                        cmd.get("command")
-                            .and_then(|c| c.as_str())
-                            .map(|s| s.contains("memo inject"))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-        });
-        if already {
-            return Ok(false);
-        }
+    match root["hooks"]["Stop"].as_array_mut() {
+        Some(arr) => arr.push(memo_hook),
+        None => root["hooks"]["Stop"] = serde_json::json!([memo_hook]),
     }
 
-    root["hooks"]["Stop"]
-        .as_array_mut()
-        .map(|arr| arr.push(memo_hook.clone()))
-        .unwrap_or_else(|| {
-            root["hooks"]["Stop"] = serde_json::json!([memo_hook]);
-        });
-
-    std::fs::write(&settings_path, serde_json::to_string_pretty(&root)?)?;
+    fs::write(&settings_path, serde_json::to_string_pretty(&root)?)?;
     Ok(true)
 }
 
-pub fn write_to_claude_md(block: &InjectBlock, project_dir: &Path) -> Result<()> {
-    let claude_md = project_dir.join("CLAUDE.md");
-    let section_start = "<!-- memo:start -->";
-    let section_end = "<!-- memo:end -->";
-
-    let memo_section = format!(
-        "{}\n{}{}\n",
-        section_start,
-        block.render_text(),
-        section_end
-    );
-
-    let existing = if claude_md.exists() {
-        std::fs::read_to_string(&claude_md)?
-    } else {
-        String::new()
-    };
-
-    let new_content = if existing.contains(section_start) {
-        // Replace existing section
-        let start = existing.find(section_start).unwrap();
-        let end = existing
-            .find(section_end)
-            .map(|i| i + section_end.len())
-            .unwrap_or(existing.len());
-        format!("{}{}{}", &existing[..start], memo_section, &existing[end..])
-    } else {
-        // Prepend
-        format!("{}\n{}", memo_section, existing)
-    };
-
-    std::fs::write(&claude_md, new_content)?;
-    Ok(())
+impl InjectBlock {
+    fn empty() -> Self {
+        Self { last_entry: None, todos: vec![], recent_tags: vec![], entry_count: 0 }
+    }
 }
 
 #[cfg(test)]
@@ -231,12 +184,7 @@ mod tests {
 
     #[test]
     fn test_render_text_empty() {
-        let block = InjectBlock {
-            last_entry: None,
-            todos: vec![],
-            recent_tags: vec![],
-            entry_count: 0,
-        };
+        let block = InjectBlock::empty();
         let text = block.render_text();
         assert!(text.contains("## memo context"));
         assert!(text.contains("no entries yet"));
@@ -250,16 +198,30 @@ mod tests {
             recent_tags: vec!["bug".to_string()],
             entry_count: 5,
         };
-        let json = block.render_json().unwrap();
-        let val: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let val: serde_json::Value = serde_json::from_str(&block.render_json().unwrap()).unwrap();
         assert_eq!(val["entry_count"], 5);
         assert_eq!(val["recent_tags"][0], "bug");
     }
 
     #[test]
-    fn test_write_to_claude_md() {
+    fn test_patch_markdown_section_create_and_replace() {
         let dir = env::temp_dir().join(format!("memo_hooks_test_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("CLAUDE.md");
+
+        patch_markdown_section(&path, "<!-- s -->", "<!-- e -->", "content\n").unwrap();
+        let c = fs::read_to_string(&path).unwrap();
+        assert!(c.contains("<!-- s -->") && c.contains("content"));
+
+        // Idempotent
+        patch_markdown_section(&path, "<!-- s -->", "<!-- e -->", "content\n").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap().matches("<!-- s -->").count(), 1);
+    }
+
+    #[test]
+    fn test_write_to_claude_md() {
+        let dir = env::temp_dir().join(format!("memo_hooks_write_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
 
         let block = InjectBlock {
             last_entry: None,
@@ -269,14 +231,14 @@ mod tests {
         };
 
         write_to_claude_md(&block, &dir).unwrap();
-
-        let content = std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
+        let content = fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
         assert!(content.contains("<!-- memo:start -->"));
         assert!(content.contains("recent tags: refactor"));
 
-        // Idempotent: write again, should replace not append
         write_to_claude_md(&block, &dir).unwrap();
-        let content2 = std::fs::read_to_string(dir.join("CLAUDE.md")).unwrap();
-        assert_eq!(content2.matches("<!-- memo:start -->").count(), 1);
+        assert_eq!(
+            fs::read_to_string(dir.join("CLAUDE.md")).unwrap().matches("<!-- memo:start -->").count(),
+            1
+        );
     }
 }

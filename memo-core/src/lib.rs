@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, Row, params};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -29,19 +29,6 @@ pub struct Store {
 }
 
 impl Store {
-    #[cfg(test)]
-    pub fn open_in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
-        conn.execute_batch(SCHEMA)?;
-        let project_id = "test_project".to_string();
-        let session_id = new_session_id();
-        conn.execute(
-            "INSERT OR IGNORE INTO sessions (id, started_at, project_id) VALUES (?1, ?2, ?3)",
-            params![session_id, Utc::now().to_rfc3339(), project_id],
-        )?;
-        Ok(Self { conn, project_id, session_id })
-    }
-
     pub fn open(project_dir: &Path) -> Result<Self> {
         let project_id = detect_project_id(project_dir)?;
         let db_path = db_path(&project_id)?;
@@ -62,17 +49,15 @@ impl Store {
             params![session_id, Utc::now().to_rfc3339(), project_id],
         )?;
 
-        Ok(Self {
-            conn,
-            project_id,
-            session_id,
-        })
+        Ok(Self { conn, project_id, session_id })
     }
 
+    /// Save an entry and return its row ID.
     pub fn save(&self, content: &str, tags: &[String]) -> Result<i64> {
         let tags_json = serde_json::to_string(tags)?;
-        let id = self.conn.execute(
-            "INSERT INTO entries (timestamp, content, tags, project_id, session_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        self.conn.execute(
+            "INSERT INTO entries (timestamp, content, tags, project_id, session_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 Utc::now().to_rfc3339(),
                 content,
@@ -81,76 +66,57 @@ impl Store {
                 self.session_id,
             ],
         )?;
-        Ok(id as i64)
+        Ok(self.conn.last_insert_rowid())
     }
 
     pub fn list(&self, limit: Option<usize>) -> Result<Vec<Entry>> {
-        self.query_entries(
+        self.fetch(
             "SELECT id, timestamp, content, tags, project_id, session_id \
-             FROM entries WHERE project_id = ?1 ORDER BY timestamp DESC",
-            &self.project_id,
-            limit,
+             FROM entries WHERE project_id = ?1 ORDER BY timestamp DESC LIMIT ?2",
+            params![self.project_id, limit_val(limit)],
+        )
+    }
+
+    pub fn list_by_tag(&self, tag: &str, limit: Option<usize>) -> Result<Vec<Entry>> {
+        self.fetch(
+            "SELECT id, timestamp, content, tags, project_id, session_id \
+             FROM entries WHERE project_id = ?1 AND instr(tags, json_quote(?2)) > 0 \
+             ORDER BY timestamp DESC LIMIT ?3",
+            params![self.project_id, tag, limit_val(limit)],
+        )
+    }
+
+    pub fn list_since(&self, since: DateTime<Utc>, limit: Option<usize>) -> Result<Vec<Entry>> {
+        self.fetch(
+            "SELECT id, timestamp, content, tags, project_id, session_id \
+             FROM entries WHERE project_id = ?1 AND timestamp >= ?2 \
+             ORDER BY timestamp DESC LIMIT ?3",
+            params![self.project_id, since.to_rfc3339(), limit_val(limit)],
         )
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<Entry>> {
-        let pattern = format!("%{}%", query);
-        let mut stmt = self.conn.prepare(
+        self.fetch(
             "SELECT id, timestamp, content, tags, project_id, session_id \
-             FROM entries WHERE project_id = ?1 AND content LIKE ?2 ORDER BY timestamp DESC",
-        )?;
-        let entries = stmt
-            .query_map(params![self.project_id, pattern], |row| {
-                let tags_json: String = row.get(3)?;
-                let ts_str: String = row.get(1)?;
-                Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-            })?
-            .map(|r| row_tuple_to_entry(r?))
-            .collect::<Result<Vec<_>>>()?;
-        Ok(entries)
+             FROM entries WHERE project_id = ?1 AND content LIKE ?2 \
+             ORDER BY timestamp DESC",
+            params![self.project_id, format!("%{query}%")],
+        )
     }
 
-    fn query_entries(
-        &self,
-        base_sql: &str,
-        project_id: &str,
-        limit: Option<usize>,
-    ) -> Result<Vec<Entry>> {
-        match limit {
-            Some(n) => {
-                let sql = format!("{} LIMIT ?2", base_sql);
-                let mut stmt = self.conn.prepare(&sql)?;
-                let entries = stmt
-                    .query_map(params![project_id, n as i64], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-            None => {
-                let mut stmt = self.conn.prepare(base_sql)?;
-                let entries = stmt
-                    .query_map(params![project_id], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-        }
+    pub fn delete(&self, id: i64) -> Result<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM entries WHERE id = ?1 AND project_id = ?2",
+            params![id, self.project_id],
+        )?;
+        Ok(n > 0)
     }
 
     pub fn clear(&self) -> Result<usize> {
-        let n = self.conn.execute(
+        Ok(self.conn.execute(
             "DELETE FROM entries WHERE project_id = ?1",
             params![self.project_id],
-        )?;
-        Ok(n)
+        )?)
     }
 
     pub fn count(&self) -> Result<usize> {
@@ -173,8 +139,7 @@ impl Store {
         let mut seen = std::collections::HashSet::new();
         let mut tags = Vec::new();
         for row in rows {
-            let json = row?;
-            let ts: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+            let ts: Vec<String> = serde_json::from_str(&row?).unwrap_or_default();
             for t in ts {
                 if seen.insert(t.clone()) {
                     tags.push(t);
@@ -182,48 +147,6 @@ impl Store {
             }
         }
         Ok(tags)
-    }
-
-    pub fn list_by_tag(&self, tag: &str, limit: Option<usize>) -> Result<Vec<Entry>> {
-        let base_sql = "SELECT id, timestamp, content, tags, project_id, session_id \
-             FROM entries WHERE project_id = ?1 AND instr(tags, json_quote(?2)) > 0 \
-             ORDER BY timestamp DESC";
-        let project_id = self.project_id.clone();
-        match limit {
-            Some(n) => {
-                let sql = format!("{} LIMIT ?3", base_sql);
-                let mut stmt = self.conn.prepare(&sql)?;
-                let entries = stmt
-                    .query_map(params![project_id, tag, n as i64], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-            None => {
-                let mut stmt = self.conn.prepare(base_sql)?;
-                let entries = stmt
-                    .query_map(params![project_id, tag], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-        }
-    }
-
-    pub fn delete(&self, id: i64) -> Result<bool> {
-        let n = self.conn.execute(
-            "DELETE FROM entries WHERE id = ?1 AND project_id = ?2",
-            params![id, self.project_id],
-        )?;
-        Ok(n > 0)
     }
 
     pub fn all_tags(&self) -> Result<Vec<(String, usize)>> {
@@ -236,8 +159,7 @@ impl Store {
 
         let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for row in rows {
-            let json = row?;
-            let ts: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+            let ts: Vec<String> = serde_json::from_str(&row?).unwrap_or_default();
             for t in ts {
                 *counts.entry(t).or_insert(0) += 1;
             }
@@ -248,67 +170,40 @@ impl Store {
         Ok(result)
     }
 
-    pub fn list_since(&self, since: DateTime<Utc>, limit: Option<usize>) -> Result<Vec<Entry>> {
-        let since_str = since.to_rfc3339();
-        let base_sql = "SELECT id, timestamp, content, tags, project_id, session_id \
-             FROM entries WHERE project_id = ?1 AND timestamp >= ?2 ORDER BY timestamp DESC";
-        let project_id = self.project_id.clone();
-        match limit {
-            Some(n) => {
-                let sql = format!("{} LIMIT ?3", base_sql);
-                let mut stmt = self.conn.prepare(&sql)?;
-                let entries = stmt
-                    .query_map(params![project_id, since_str, n as i64], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-            None => {
-                let mut stmt = self.conn.prepare(base_sql)?;
-                let entries = stmt
-                    .query_map(params![project_id, since_str], |row| {
-                        let tags_json: String = row.get(3)?;
-                        let ts_str: String = row.get(1)?;
-                        Ok((row.get(0)?, ts_str, row.get(2)?, tags_json, row.get(4)?, row.get(5)?))
-                    })?
-                    .map(|r| row_tuple_to_entry(r?))
-                    .collect::<Result<Vec<_>>>()?;
-                Ok(entries)
-            }
-        }
+    /// Core fetch helper: runs a prepared statement and maps rows to entries.
+    fn fetch(&self, sql: &str, params: impl rusqlite::Params) -> Result<Vec<Entry>> {
+        let mut stmt = self.conn.prepare(sql)?;
+        stmt.query_map(params, map_row)?
+            .map(|r| r.map_err(anyhow::Error::from))
+            .collect()
     }
 }
 
-fn row_tuple_to_entry(
-    (id, ts_str, content, tags_json, project_id, session_id): (
-        i64,
-        String,
-        String,
-        String,
-        String,
-        String,
-    ),
-) -> Result<Entry> {
+/// Map a SQLite row (columns: id, timestamp, content, tags, project_id, session_id) to an Entry.
+fn map_row(row: &Row<'_>) -> rusqlite::Result<Entry> {
+    let ts_str: String = row.get(1)?;
+    let tags_json: String = row.get(3)?;
     let timestamp = DateTime::parse_from_rfc3339(&ts_str)
         .map(|dt| dt.with_timezone(&Utc))
         .unwrap_or_else(|_| Utc::now());
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
     Ok(Entry {
-        id,
+        id: row.get(0)?,
         timestamp,
-        content,
+        content: row.get(2)?,
         tags,
-        project_id,
-        session_id,
+        project_id: row.get(4)?,
+        session_id: row.get(5)?,
     })
 }
 
+/// Convert an optional limit to a SQLite LIMIT value. -1 means no limit.
+#[inline]
+fn limit_val(limit: Option<usize>) -> i64 {
+    limit.map(|n| n as i64).unwrap_or(-1)
+}
+
 fn detect_project_id(dir: &Path) -> Result<String> {
-    // Try to find git remote URL
     if let Ok(output) = std::process::Command::new("git")
         .args(["-C", &dir.to_string_lossy(), "remote", "get-url", "origin"])
         .output()
@@ -319,22 +214,20 @@ fn detect_project_id(dir: &Path) -> Result<String> {
             return Ok(hash_str(&url));
         }
     }
-
-    // Fallback: hash the absolute path
     let canonical = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     Ok(hash_str(&canonical.to_string_lossy()))
 }
 
 fn hash_str(s: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(s.as_bytes());
-    let result = hasher.finalize();
-    format!("{:x}", result)[..16].to_string()
+    let bytes = Sha256::digest(s.as_bytes());
+    bytes.iter().take(8).fold(String::with_capacity(16), |mut acc, b| {
+        acc.push_str(&format!("{b:02x}"));
+        acc
+    })
 }
 
 fn db_path(project_id: &str) -> Result<PathBuf> {
-    let base = dirs_base()?;
-    Ok(base.join(format!("{}.db", project_id)))
+    Ok(dirs_base()?.join(format!("{project_id}.db")))
 }
 
 fn dirs_base() -> Result<PathBuf> {
@@ -345,11 +238,11 @@ fn dirs_base() -> Result<PathBuf> {
 
 fn new_session_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let ts = SystemTime::now()
+    let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    format!("{:x}", ts)
+    format!("{nanos:x}")
 }
 
 const SCHEMA: &str = "
@@ -374,6 +267,21 @@ CREATE INDEX IF NOT EXISTS idx_entries_project ON entries(project_id, timestamp)
 ";
 
 #[cfg(test)]
+impl Store {
+    pub fn open_in_memory() -> Result<Self> {
+        let conn = Connection::open_in_memory()?;
+        conn.execute_batch(SCHEMA)?;
+        let project_id = "test_project".to_string();
+        let session_id = new_session_id();
+        conn.execute(
+            "INSERT OR IGNORE INTO sessions (id, started_at, project_id) VALUES (?1, ?2, ?3)",
+            params![session_id, Utc::now().to_rfc3339(), project_id],
+        )?;
+        Ok(Self { conn, project_id, session_id })
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -388,6 +296,15 @@ mod tests {
     }
 
     #[test]
+    fn test_save_returns_rowid() {
+        let store = Store::open_in_memory().unwrap();
+        let id1 = store.save("first", &[]).unwrap();
+        let id2 = store.save("second", &[]).unwrap();
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+    }
+
+    #[test]
     fn test_count() {
         let store = Store::open_in_memory().unwrap();
         store.save("a", &[]).unwrap();
@@ -399,8 +316,7 @@ mod tests {
     fn test_clear() {
         let store = Store::open_in_memory().unwrap();
         store.save("a", &[]).unwrap();
-        let n = store.clear().unwrap();
-        assert_eq!(n, 1);
+        assert_eq!(store.clear().unwrap(), 1);
         assert_eq!(store.count().unwrap(), 0);
     }
 
@@ -420,23 +336,17 @@ mod tests {
         store.save("fix auth", &["bug".to_string(), "auth".to_string()]).unwrap();
         store.save("refactor db", &["refactor".to_string()]).unwrap();
         store.save("fix typo", &["bug".to_string()]).unwrap();
-        let entries = store.list_by_tag("bug", None).unwrap();
-        assert_eq!(entries.len(), 2);
-        let entries_limited = store.list_by_tag("bug", Some(1)).unwrap();
-        assert_eq!(entries_limited.len(), 1);
+        assert_eq!(store.list_by_tag("bug", None).unwrap().len(), 2);
+        assert_eq!(store.list_by_tag("bug", Some(1)).unwrap().len(), 1);
     }
 
     #[test]
     fn test_delete() {
         let store = Store::open_in_memory().unwrap();
         let id = store.save("to delete", &[]).unwrap();
-        assert_eq!(store.count().unwrap(), 1);
-        let deleted = store.delete(id).unwrap();
-        assert!(deleted);
+        assert!(store.delete(id).unwrap());
         assert_eq!(store.count().unwrap(), 0);
-        // deleting again returns false
-        let deleted2 = store.delete(id).unwrap();
-        assert!(!deleted2);
+        assert!(!store.delete(id).unwrap());
     }
 
     #[test]
@@ -446,8 +356,7 @@ mod tests {
         store.save("b", &["bug".to_string()]).unwrap();
         store.save("c", &["refactor".to_string()]).unwrap();
         let tags = store.all_tags().unwrap();
-        assert_eq!(tags[0].0, "bug");
-        assert_eq!(tags[0].1, 2);
+        assert_eq!(tags[0], ("bug".to_string(), 2));
     }
 
     #[test]
