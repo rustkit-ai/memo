@@ -38,14 +38,14 @@
   <text x="64" y="200" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#3fb950">▌</text>
 
   <!-- Name -->
-  <text x="318" y="152" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="white" letter-spacing="-2">memo</text>
+  <text x="318" y="152" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="52" font-weight="700" fill="white" letter-spacing="-2">memo-agent</text>
 
   <!-- Gradient underline -->
-  <rect x="318" y="165" width="222" height="3" fill="url(#accent)" rx="2"/>
+  <rect x="318" y="165" width="340" height="3" fill="url(#accent)" rx="2"/>
 
   <!-- Tagline — two lines -->
   <text x="318" y="198" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#6e7681" letter-spacing="0.2">AI agents forget.</text>
-  <text x="318" y="222" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#c9d1d9" font-weight="600" letter-spacing="0.2">memo remembers.</text>
+  <text x="318" y="222" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#c9d1d9" font-weight="600" letter-spacing="0.2">memo-agent remembers.</text>
 
   <!-- Right side — feature pills -->
   <g transform="translate(756, 92)">

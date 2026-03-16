@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.8] - 2026-03-16
+
+### Changed
+- Renamed project to **memo-agent** (repo, crate, branding, documentation)
+- Merged `memo-core` and `memo-hooks` into `memo-agent` — single crate, single publish
+- Fixed path display on Windows: backslashes normalized to forward slashes in log entries
+- Fixed `memo doctor` PATH check on Windows: looks for `memo.exe` instead of `memo`
+- Fixed doctor integration test: injects binary directory into PATH so doctor check passes in CI
+
+### Fixed
+- Clippy warnings: `&PathBuf` → `&Path` in `run_capture`, five collapsed `if` blocks
+
+## [0.1.7] - 2026-03-16
+
+### Fixed
+- Clippy `ptr_arg` and `collapsible_if` warnings (part of CI `-D warnings` enforcement)
+- Integration test `test_doctor_after_setup`: binary dir now added to PATH so doctor finds the `memo` binary
+
 ## [0.1.6] - 2026-03-16
 
 ### Added
