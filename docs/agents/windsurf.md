@@ -1,4 +1,4 @@
-# memo × Windsurf
+# memo-agent × Windsurf
 
 Windsurf reads `.windsurfrules` automatically in every session. `memo setup` writes instructions into that file telling Windsurf to maintain the memory loop: inject context at session start, log after file edits, recap at session end.
 

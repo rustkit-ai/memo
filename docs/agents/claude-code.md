@@ -1,4 +1,4 @@
-# memo × Claude Code
+# memo-agent × Claude Code
 
 Claude Code reads `CLAUDE.md` automatically at the start of every session. `memo setup` installs **three hooks** and writes a context block into `CLAUDE.md` — the full memory loop runs with zero manual steps, ever.
 

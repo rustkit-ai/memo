@@ -1,4 +1,4 @@
-# memo × GitHub Copilot / VS Code
+# memo-agent × GitHub Copilot / VS Code
 
 GitHub Copilot reads `.github/copilot-instructions.md` automatically in VS Code and JetBrains IDEs. `memo setup` writes instructions into that file telling Copilot to maintain the memory loop: inject context at session start, log after file edits, recap at session end.
 

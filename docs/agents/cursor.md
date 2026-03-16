@@ -1,4 +1,4 @@
-# memo × Cursor
+# memo-agent × Cursor
 
 Cursor reads rules from `.cursor/rules/` automatically. `memo setup` writes a rule file with `alwaysApply: true` that instructs Cursor to maintain the memory loop: inject context at session start, log after file edits, recap at session end.
 

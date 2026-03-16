@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="memo — Persistent memory for AI coding agents" width="100%"/>
+  <img src="assets/banner.svg" alt="memo-agent — Persistent memory for AI coding agents" width="100%"/>
 </p>
 
-<h1 align="center">memo — Persistent memory for AI coding agents</h1>
+<h1 align="center">memo-agent — Persistent memory for AI coding agents</h1>
 
 <p align="center">
   AI agents forget everything between sessions.<br/>
-  memo gives them a memory that survives — across sessions, across tools, without any effort on your part.
+  memo-agent gives them a memory that survives — across sessions, across tools, without any effort on your part.
 </p>
 
 <p align="center">
@@ -343,9 +343,9 @@ Each developer's local DB stays private. Only what's been synced ends up in `.me
 
 ## The vision
 
-memo is not just a CLI tool — it's the foundation of **continuous AI-assisted development**.
+memo-agent is not just a CLI tool — it's the foundation of **continuous AI-assisted development**.
 
-Today, AI coding sessions are episodic: each one starts fresh and ends with context thrown away. memo makes them continuous: every session is a direct continuation of the last, regardless of which AI tool you're using or how much time has passed.
+Today, AI coding sessions are episodic: each one starts fresh and ends with context thrown away. memo-agent makes them continuous: every session is a direct continuation of the last, regardless of which AI tool you're using or how much time has passed.
 
 As agents become more autonomous — running longer tasks, working across multiple tools, eventually operating overnight — the need for a shared, persistent, lightweight memory layer only grows. memo is designed to be that layer: simple enough to stay out of your way, robust enough to be the backbone of your entire AI-assisted workflow.
 
