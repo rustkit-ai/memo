@@ -32,17 +32,6 @@ recent tags: refactor · auth · bug
 
 ---
 
-## Supported agents
-
-| Agent | Auto-inject | Context file |
-|---|---|---|
-| **Claude Code** | Yes — Stop hook runs automatically at session end | `CLAUDE.md` |
-| **Cursor** | Agent-triggered at session start | `.cursor/rules/memo.mdc` |
-| **Windsurf** | Agent-triggered at session start | `.windsurfrules` |
-| **GitHub Copilot** | Agent-triggered at session start | `.github/copilot-instructions.md` |
-
----
-
 ## Install
 
 **cargo**:
@@ -63,104 +52,115 @@ brew install memo
 
 ---
 
-## Setup — one command, all agents
+## Claude Code — fully automatic
 
-Run this once in your project root:
+Claude Code is a CLI tool with a native hook system. `memo` uses the **Stop hook** to update context automatically when you close a session — no manual steps, ever.
 
 ```sh
 memo setup
 ```
 
-`memo setup` configures every supported agent at once:
+Three things happen:
 
-- **Claude Code** — writes instructions into `CLAUDE.md` and installs a Stop hook in `.claude/settings.json` so context refreshes automatically when you close a session
-- **Cursor** — writes `.cursor/rules/memo.mdc` with `alwaysApply: true`
-- **Windsurf** — writes `.windsurfrules`
-- **GitHub Copilot** — writes `.github/copilot-instructions.md`
+1. `CLAUDE.md` gets memo instructions and an initial context block
+2. `.claude/settings.json` gets a Stop hook that runs `memo inject --claude` every time you close Claude Code
+3. Claude reads `CLAUDE.md` automatically at startup — it already knows what was done last session
 
-You never have to think about it again.
-
----
-
-## How it works
-
-### 1. Work normally
-
-Your agent logs what it does using `memo log` as it goes:
+### The Claude Code loop
 
 ```
-You: implement the password reset flow
-
-Agent: [works on the feature]
-       memo log "implemented password reset: email token, 1h expiry, bcrypt hash"
-       memo log "todo: add rate limiting on /reset endpoint"
+Open Claude Code
+      │
+      ▼
+Claude reads CLAUDE.md  ←── context from last session
+      │
+      ▼
+You work — Claude logs:
+  memo log "implemented OAuth2 via Google provider"
+  memo log "todo: handle token expiry edge case"
+      │
+      ▼
+You close Claude Code
+      │
+      ▼
+Stop hook fires automatically → memo inject --claude
+      │
+      ▼
+CLAUDE.md updated silently — ready for next session
 ```
 
-### 2. Session ends — context updates automatically
-
-**Claude Code**: the Stop hook fires and runs `memo inject --claude`. `CLAUDE.md` is updated silently in the background.
-
-**Cursor / Windsurf / Copilot**: at the start of the next session, the agent runs its inject command before doing anything else.
-
-The context block written to your rules file:
-
-```markdown
-<!-- memo:start -->
-## memo context
-last: 2026-03-15 — "implemented password reset: email token, 1h expiry, bcrypt hash"
-todo: add rate limiting on /reset endpoint
-recent tags: auth · security · todo
-<!-- memo:end -->
-```
-
-### 3. Next session — the agent knows where it left off
+### Example
 
 ```
 You: what did we do last time?
 
-Agent: Based on memo — you implemented password reset with an email token,
-       1h expiry, and bcrypt hash. Still need to add rate limiting on /reset.
-       Want me to start there?
+Claude: Based on memo — you implemented OAuth2 via Google provider.
+        Pending: handle token expiry edge case.
+        Want me to pick up from there?
 ```
 
-No re-exploration. No repeated questions. Every session picks up exactly where the last one ended.
+No copy-pasting. No manual notes. Claude picks up exactly where it left off.
 
 ---
 
-## The full loop
+## Cursor, Windsurf, GitHub Copilot — agent-triggered
+
+Cursor, Windsurf, and Copilot are IDE extensions — they don't expose a session lifecycle hook like Claude Code does. Instead, `memo setup` writes instructions directly into their rules files, telling the agent to run the inject command itself at the start of each session.
+
+```sh
+memo setup
+```
+
+| Agent | Rules file | Inject command |
+|---|---|---|
+| **Cursor** | `.cursor/rules/memo.mdc` (`alwaysApply: true`) | `memo inject --cursor` |
+| **Windsurf** | `.windsurfrules` | `memo inject --windsurf` |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | `memo inject --copilot` |
+
+### The Cursor / Windsurf / Copilot loop
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│   memo setup              ← run once, configures all       │
-│        │                    agents automatically           │
-│        ▼                                                   │
-│   Open Claude Code / Cursor / Windsurf / Copilot           │
-│        │                                                   │
-│        ▼                                                   │
-│   Agent reads context file  ←── memory from last session   │
-│        │                                                   │
-│        ▼                                                   │
-│   Work: tasks, fixes, features                             │
-│        │                                                   │
-│        ▼                                                   │
-│   Agent logs with memo log "..."                           │
-│        │                                                   │
-│        ▼                                                   │
-│   Session ends → context file updated ─────────────────┐  │
-│                                                         │  │
-│   Next session ◄────────────────────────────────────────┘  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+Open agent
+      │
+      ▼
+Agent reads rules file (loaded automatically)
+      │
+      ▼
+Agent runs: memo inject --[agent]
+      │
+      ▼
+Rules file updated with latest context
+      │
+      ▼
+Agent knows where it left off — starts working
+      │
+      ▼
+You work — agent logs:
+  memo log "migrated DB to PostgreSQL 16"
+  memo log "todo: update connection pool config"
+      │
+      ▼
+Next session — same loop
 ```
+
+### Example
+
+```
+You: [opens Cursor]
+
+Cursor: Based on memo — last session you migrated the DB to PostgreSQL 16.
+        Pending: update the connection pool config. Should I start there?
+```
+
+The difference from Claude Code: the context file is updated **at the start** of the next session rather than at the end of the current one. The result is the same — the agent always knows where it left off.
 
 ---
 
 ## Agent guides
 
-Step-by-step integration guide for each agent:
+Full setup and usage details for each agent:
 
-- [Claude Code — automatic memory via Stop hook](docs/agents/claude-code.md)
+- [Claude Code — fully automatic via Stop hook](docs/agents/claude-code.md)
 - [Cursor — persistent context with alwaysApply rules](docs/agents/cursor.md)
 - [Windsurf — session memory via .windsurfrules](docs/agents/windsurf.md)
 - [GitHub Copilot — persistent instructions across sessions](docs/agents/copilot.md)
