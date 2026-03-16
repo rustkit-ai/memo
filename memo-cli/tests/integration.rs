@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -181,4 +182,139 @@ fn test_log_stdin() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "memo log - failed: {:?}", output);
     assert!(stdout.contains("logged: stdin message"), "unexpected: {}", stdout);
+}
+
+// ── memo capture (PostToolUse hook) ──────────────────────────────────────────
+
+fn run_capture_with_payload(home: &PathBuf, payload: &str) -> std::process::Output {
+    let project = home.join("project");
+    let mut child = Command::new(memo_bin())
+        .args(["capture"])
+        .env("HOME", home)
+        .current_dir(&project)
+        .env("GIT_DIR", "/dev/null")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn memo capture");
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(payload.as_bytes()).expect("write payload");
+    }
+    child.wait_with_output().expect("wait for memo capture")
+}
+
+#[test]
+fn test_capture_write_with_fn_description() {
+    let home = temp_home("capture_write");
+    let project = home.join("project");
+    let file = project.join("src").join("auth.rs");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+
+    let content = "pub async fn handle_login(req: Request) -> Response {\n    todo!()\n}\n";
+    std::fs::write(&file, content).unwrap();
+
+    let payload = serde_json::json!({
+        "tool_name": "Write",
+        "tool_input": {
+            "file_path": file.to_str().unwrap(),
+            "content": content,
+        }
+    });
+
+    let out = run_capture_with_payload(&home, &payload.to_string());
+    assert!(out.status.success(), "capture failed: {:?}", out);
+
+    // The captured entry should include the fn description
+    let list_out = run_memo(&home, &["list"]);
+    let list_stdout = String::from_utf8_lossy(&list_out.stdout);
+    assert!(
+        list_stdout.contains("wrote src/auth.rs: added fn handle_login"),
+        "expected smart description, got: {list_stdout}"
+    );
+}
+
+#[test]
+fn test_capture_edit_with_fn_description() {
+    let home = temp_home("capture_edit");
+    let project = home.join("project");
+    let file = project.join("src").join("db.rs");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "fn old() {}\n").unwrap();
+
+    let payload = serde_json::json!({
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": file.to_str().unwrap(),
+            "old_string": "fn old() {}",
+            "new_string": "fn old() {}\npub fn connect_pool(config: &Config) -> Pool {\n    todo!()\n}",
+        }
+    });
+
+    run_capture_with_payload(&home, &payload.to_string());
+
+    let list_out = run_memo(&home, &["list"]);
+    let stdout = String::from_utf8_lossy(&list_out.stdout);
+    assert!(
+        stdout.contains("edited src/db.rs: added fn connect_pool"),
+        "expected smart description, got: {stdout}"
+    );
+}
+
+#[test]
+fn test_capture_edit_no_pattern_falls_back() {
+    let home = temp_home("capture_fallback");
+    let project = home.join("project");
+    let file = project.join("config.toml");
+    std::fs::write(&file, "port = 3000\n").unwrap();
+
+    let payload = serde_json::json!({
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": file.to_str().unwrap(),
+            "old_string": "port = 3000",
+            "new_string": "port = 8080",
+        }
+    });
+
+    run_capture_with_payload(&home, &payload.to_string());
+
+    let list_out = run_memo(&home, &["list"]);
+    let stdout = String::from_utf8_lossy(&list_out.stdout);
+    assert!(
+        stdout.contains("edited config.toml"),
+        "expected fallback description, got: {stdout}"
+    );
+}
+
+// ── memo doctor ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_doctor_after_setup() {
+    let home = temp_home("doctor_setup");
+
+    // Run setup first
+    let setup_out = run_memo(&home, &["setup"]);
+    assert!(setup_out.status.success(), "setup failed: {:?}", setup_out);
+
+    let out = run_memo(&home, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "doctor failed: {:?}", out);
+
+    // Should report all green
+    assert!(stdout.contains("All checks passed"), "expected all green, got: {stdout}");
+}
+
+#[test]
+fn test_doctor_without_setup_reports_issues() {
+    let home = temp_home("doctor_no_setup");
+
+    let out = run_memo(&home, &["doctor"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+
+    // Should report issues
+    assert!(
+        stdout.contains("issue") || stdout.contains("missing") || stdout.contains("not found"),
+        "expected issues reported, got: {stdout}"
+    );
 }

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-03-16
+
+### Added
+- `memo capture` now extracts a code description from the diff payload: `"wrote src/auth.rs: added fn handle_login"` instead of just `"wrote src/auth.rs"`. Detects fn/struct/enum/trait/impl/class/interface/route patterns across Rust, TypeScript, JavaScript, and Python.
+- `memo doctor` now checks all three Claude Code hooks (Stop, UserPromptSubmit, PostToolUse) individually, and checks agent config files for Cursor, Windsurf, and Copilot if detected in the project.
+- 31 new tests (26 unit tests for capture helpers + 5 integration tests for `capture` and `doctor`).
+
+### Changed
+- `memo capture` canonicalizes file paths before stripping the project prefix, fixing relative path display on macOS (symlinked `/var` → `/private/var`).
+
 ## [0.1.5] - 2026-03-16
 
 ### Added

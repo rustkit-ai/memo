@@ -22,45 +22,49 @@
   <!-- Left accent bar -->
   <rect x="0" y="0" width="4" height="300" fill="url(#accent)" rx="2"/>
 
-  <!-- Terminal icon -->
-  <rect x="60" y="100" width="100" height="70" rx="8" fill="none" stroke="#30363d" stroke-width="2"/>
-  <rect x="60" y="100" width="100" height="18" rx="8" fill="#21262d"/>
-  <rect x="60" y="109" width="100" height="9" fill="#21262d"/>
-  <circle cx="75" cy="109" r="4" fill="#ff5f57"/>
-  <circle cx="89" cy="109" r="4" fill="#febc2e"/>
-  <circle cx="103" cy="109" r="4" fill="#28c840"/>
-  <text x="70" y="142" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#58a6ff">$ memo inject</text>
-  <text x="70" y="158" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#3fb950">## memo context</text>
+  <!-- Terminal window -->
+  <rect x="52" y="72" width="230" height="148" rx="8" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+  <rect x="52" y="72" width="230" height="24" rx="8" fill="#161b22"/>
+  <rect x="52" y="84" width="230" height="12" fill="#161b22"/>
+  <circle cx="70" cy="84" r="4" fill="#ff5f57"/>
+  <circle cx="85" cy="84" r="4" fill="#febc2e"/>
+  <circle cx="100" cy="84" r="4" fill="#28c840"/>
+  <text x="64" y="114" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#58a6ff">$ memo inject</text>
+  <text x="64" y="130" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#3fb950">## memo context</text>
+  <text x="64" y="145" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#c9d1d9">recap: "migrated DB to pg16"</text>
+  <text x="64" y="158" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#8b949e">recent: "edited src/db/pool.rs"</text>
+  <text x="64" y="171" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#f0883e">todo: update connection pool</text>
+  <text x="64" y="184" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#6e7681">recent tags: db · migration · auto</text>
+  <text x="64" y="200" font-family="'SF Mono', 'Fira Code', monospace" font-size="8" fill="#3fb950">▌</text>
 
   <!-- Name -->
-  <text x="200" y="155" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="white" letter-spacing="-2">memo</text>
+  <text x="318" y="152" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="700" fill="white" letter-spacing="-2">memo</text>
 
   <!-- Gradient underline -->
-  <rect x="200" y="168" width="220" height="3" fill="url(#accent)" rx="2"/>
+  <rect x="318" y="165" width="222" height="3" fill="url(#accent)" rx="2"/>
 
-  <!-- Tagline -->
-  <text x="200" y="205" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#8b949e" letter-spacing="0.3">Persistent memory for AI coding agents</text>
+  <!-- Tagline — two lines -->
+  <text x="318" y="198" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#6e7681" letter-spacing="0.2">AI agents forget.</text>
+  <text x="318" y="222" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="19" fill="#c9d1d9" font-weight="600" letter-spacing="0.2">memo remembers.</text>
 
   <!-- Right side — feature pills -->
-  <g transform="translate(740, 100)">
-    <!-- Pill 1 -->
-    <rect x="0" y="0" width="160" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="80" y="21" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#58a6ff" text-anchor="middle">⚡ single binary</text>
+  <g transform="translate(756, 92)">
+    <!-- Row 1 -->
+    <rect x="0" y="0" width="178" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="89" y="21" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#58a6ff" text-anchor="middle">⚡ zero infrastructure</text>
 
-    <!-- Pill 2 -->
-    <rect x="175" y="0" width="160" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="255" y="21" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#a371f7" text-anchor="middle">🔒 SQLite storage</text>
+    <rect x="192" y="0" width="178" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="281" y="21" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#a371f7" text-anchor="middle">🔒 local &amp; private</text>
 
-    <!-- Pill 3 -->
-    <rect x="0" y="46" width="160" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="80" y="67" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#3fb950" text-anchor="middle">🤖 Claude Code</text>
+    <!-- Row 2 -->
+    <rect x="0" y="46" width="178" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="89" y="67" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#3fb950" text-anchor="middle">🤖 5 agents supported</text>
 
-    <!-- Pill 4 -->
-    <rect x="175" y="46" width="160" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="255" y="67" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#f0883e" text-anchor="middle">~80 tokens/session</text>
+    <rect x="192" y="46" width="178" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="281" y="67" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#f0883e" text-anchor="middle">~100 tokens/session</text>
 
-    <!-- Pill 5 -->
-    <rect x="87" y="92" width="160" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
-    <text x="167" y="113" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#8b949e" text-anchor="middle">zero dependencies</text>
+    <!-- Row 3 — centered -->
+    <rect x="96" y="92" width="178" height="32" rx="16" fill="#21262d" stroke="#30363d" stroke-width="1"/>
+    <text x="185" y="113" font-family="-apple-system, 'Segoe UI', sans-serif" font-size="13" fill="#58a6ff" text-anchor="middle">✦ auto-capture</text>
   </g>
 </svg>

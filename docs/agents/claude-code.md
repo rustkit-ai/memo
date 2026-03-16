@@ -1,8 +1,6 @@
 # memo × Claude Code
 
-Claude Code reads `CLAUDE.md` automatically at the start of every session. `memo` writes a context block into that file and installs a Stop hook so the block updates automatically when you close a session.
-
-**This is the most seamless integration** — no manual steps, ever.
+Claude Code reads `CLAUDE.md` automatically at the start of every session. `memo setup` installs **three hooks** and writes a context block into `CLAUDE.md` — the full memory loop runs with zero manual steps, ever.
 
 ---
 
@@ -14,45 +12,64 @@ Run once in your project root:
 memo setup
 ```
 
-That's all. Two things happen:
+Then bootstrap from your git history so the agent has context from day one:
 
-1. **`CLAUDE.md`** gets a `memo` instructions block and an empty context block
-2. **`.claude/settings.json`** gets a Stop hook that runs `memo inject --claude` each time you close Claude Code
+```sh
+memo bootstrap
+```
 
 ---
 
-## What gets written
+## What gets installed
 
-**`CLAUDE.md`** (excerpt):
+**Three hooks in `.claude/settings.json`:**
 
-```markdown
-<!-- memo:instructions:start -->
-## memo — persistent agent memory
-- Run `memo inject --claude` at the start of every session to recall context
-- Run `memo log "<what you did>"` after each significant task
-- Run `memo log "todo: <next step>"` before ending the session
-<!-- memo:instructions:end -->
-
-<!-- memo:start -->
-## memo context
-last: (no entries yet)
-<!-- memo:end -->
-```
+| Hook | Trigger | What it does |
+|---|---|---|
+| `PostToolUse` | After every Write / Edit / MultiEdit | Runs `memo capture` — auto-logs the file with a code description |
+| `UserPromptSubmit` | At the start of each session | Runs `memo inject --claude --once` — injects fresh context |
+| `Stop` | When you close Claude Code | Runs `memo inject --claude` — saves context for next session |
 
 **`.claude/settings.json`** (excerpt):
 
 ```json
 {
   "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [{ "type": "command", "command": "memo capture" }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [{ "type": "command", "command": "memo inject --claude --once" }]
+      }
+    ],
     "Stop": [
       {
-        "hooks": [
-          { "type": "command", "command": "memo inject --claude" }
-        ]
+        "hooks": [{ "type": "command", "command": "memo inject --claude" }]
       }
     ]
   }
 }
+```
+
+**`CLAUDE.md`** (excerpt):
+
+```markdown
+<!-- memo:instructions:start -->
+## memo — persistent agent memory
+- At session start: run `memo inject --claude` to load context from previous sessions
+- After modifying any file: run `memo log "modified {filename}: {one-line reason}"`
+- When you identify something to fix later: run `memo log "todo: {description}"`
+- At session end: run `memo recap "{what was done} — next: {what comes next}"` then `memo inject --claude`
+<!-- memo:instructions:end -->
+
+<!-- memo:start -->
+## memo context
+last: (no entries yet)
+<!-- memo:end -->
 ```
 
 ---
@@ -63,24 +80,50 @@ last: (no entries yet)
 Open Claude Code
       │
       ▼
-Claude reads CLAUDE.md  ←── context from last session
+UserPromptSubmit hook → memo inject --claude --once
+      │  (injects context only if new entries exist)
+      ▼
+Claude reads CLAUDE.md ←── recap + recent entries + open todos
       │
       ▼
-You work — Claude runs:
-  memo log "added OAuth2 flow via google provider"
-  memo log "todo: handle token expiry edge case"
+You work — Claude edits files
+      │
+      ▼
+PostToolUse hook → memo capture
+      │  (logs "wrote src/auth.rs: added fn handle_login"
+      │   or  "edited src/db/pool.rs: added fn connect_pool"
+      │   or  "edited src/auth.rs (3 changes)" if no pattern matched)
+      ▼
+Claude logs semantic context:
+  memo log "modified src/auth.rs: extracted JWT validation"
+  memo log "todo: add refresh token endpoint"
+      │
+      ▼
+At session end:
+  memo recap "implemented JWT auth — next: refresh token endpoint"
       │
       ▼
 You close Claude Code
       │
       ▼
-Stop hook fires automatically
+Stop hook → memo inject --claude
       │
       ▼
-memo inject --claude  ←── CLAUDE.md updated silently
-      │
-      ▼
-Next session starts with fresh context
+CLAUDE.md updated silently — ready for next session
+```
+
+---
+
+## What the context block looks like
+
+```
+## memo context
+recap (2026-03-15): "implemented JWT auth — next: refresh token endpoint"
+recent (2026-03-15): "wrote src/auth/jwt.rs: added fn validate_token"
+recent (2026-03-15): "edited src/auth/jwt.rs: added fn refresh_token"
+recent (2026-03-15): "modified src/auth/jwt.rs: extracted JWT validation"
+todo: add refresh token endpoint
+recent tags: auth · jwt · auto
 ```
 
 ---
@@ -88,32 +131,52 @@ Next session starts with fresh context
 ## Example session
 
 ```
-You: what did we work on last time?
+You: where did we leave off?
 
-Claude: Based on memo context — you added an OAuth2 flow via Google provider.
-        There's a pending todo: handle token expiry edge case.
-        Recent tags: auth · oauth · todo.
-        Want me to pick up from there?
+Claude: Based on memo — last session you implemented JWT auth.
+        The recap says: "next: refresh token endpoint".
+        There's an open todo for that. Should I start there?
 ```
 
 ---
 
-## Manual inject
-
-If you ever want to update the context block manually (e.g. mid-session):
+## Key commands
 
 ```sh
-memo inject --claude
+memo recap "<summary>"    # log end-of-session summary (shown prominently next session)
+memo todo list            # see all open todos
+memo todo done <id>       # mark a todo as done
+memo bootstrap            # import recent git commits as memory entries
+memo inject --claude      # manually update CLAUDE.md
+memo doctor               # check hooks, DB, and all agent config files
 ```
 
 ---
 
-## Verify the hook is installed
+## Verify setup
 
 ```sh
-cat .claude/settings.json
+memo doctor
 ```
 
-You should see `memo inject --claude` in the `Stop` hooks array.
+Example output on a healthy project:
 
-If the hook is missing, run `memo setup` again — it is idempotent and safe to re-run.
+```
+Core
+  ✓ binary: /usr/local/bin/memo
+  ✓ database: ~/.local/share/memo/abc12345.db (42 entries)
+
+Claude Code
+  ✓ CLAUDE.md: memo context block present
+  ✓ hook Stop: memo inject --claude
+  ✓ hook UserPromptSubmit: memo inject --claude --once
+  ✓ hook PostToolUse: memo capture (Write|Edit|MultiEdit)
+
+Cursor
+  ✓ .cursor/rules/memo.mdc: alwaysApply: true
+  ✓ .cursor/rules/memo.mdc: memo context block present
+
+All checks passed.
+```
+
+If anything is missing, run `memo setup` again — it is idempotent.

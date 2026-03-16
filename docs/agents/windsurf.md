@@ -1,6 +1,6 @@
 # memo × Windsurf
 
-Windsurf reads `.windsurfrules` automatically in every session. `memo setup` writes instructions into that file telling Windsurf to run `memo inject --windsurf` at the start of each session, so the context block stays current.
+Windsurf reads `.windsurfrules` automatically in every session. `memo setup` writes instructions into that file telling Windsurf to maintain the memory loop: inject context at session start, log after file edits, recap at session end.
 
 ---
 
@@ -12,7 +12,11 @@ Run once in your project root:
 memo setup
 ```
 
-This writes `.windsurfrules`.
+Then bootstrap from your git history so the agent has context from day one:
+
+```sh
+memo bootstrap
+```
 
 ---
 
@@ -22,9 +26,10 @@ This writes `.windsurfrules`.
 
 ```markdown
 # memo — persistent agent memory
-- Run `memo inject --windsurf` at the start of every session to recall context
-- Run `memo log "<what you did>"` after each significant task
-- Run `memo log "todo: <next step>"` before ending the session
+- At session start: run `memo inject --windsurf` to load context from previous sessions
+- After modifying any file: run `memo log "modified {filename}: {one-line reason}"`
+- When you identify something to fix later: run `memo log "todo: {description}"`
+- At session end: run `memo recap "{what was done} — next: {what comes next}"` then `memo inject --windsurf`
 
 <!-- memo:start -->
 ## memo context
@@ -32,7 +37,7 @@ last: (no entries yet)
 <!-- memo:end -->
 ```
 
-Windsurf loads `.windsurfrules` automatically — no configuration needed.
+Windsurf loads `.windsurfrules` automatically — no additional configuration needed.
 
 ---
 
@@ -46,20 +51,35 @@ Windsurf reads .windsurfrules
       │
       ▼
 Agent runs: memo inject --windsurf
-      │
-      ▼
-.windsurfrules updated with latest context
-      │
+      │  (updates the context block in .windsurfrules)
       ▼
 Agent reads the context — knows where it left off
       │
       ▼
-You work — agent runs:
-  memo log "migrated database from PostgreSQL 14 to 16"
+You work — agent logs after each file edit:
+  memo log "modified src/db/migrate.rs: added pg16 migration"
   memo log "todo: update connection pool config for pg16 defaults"
       │
       ▼
-Next session starts the same way
+At session end:
+  memo recap "migrated DB to PostgreSQL 16 — next: update connection pool config"
+  memo inject --windsurf
+      │
+      ▼
+Next session starts with full context
+```
+
+---
+
+## What the context block looks like
+
+```
+## memo context
+recap (2026-03-15): "migrated DB to PostgreSQL 16 — next: update connection pool config"
+recent (2026-03-15): "modified src/db/migrate.rs: added pg16 migration"
+recent (2026-03-15): "modified src/db/pool.rs: extracted pool config"
+todo: update connection pool config for pg16 defaults
+recent tags: db · migration
 ```
 
 ---
@@ -69,19 +89,22 @@ Next session starts the same way
 ```
 You: [opens Windsurf, starts a new session]
 
-Windsurf: Based on memo — last session you migrated the database from
-          PostgreSQL 14 to 16. Pending: update the connection pool config
-          for pg16 defaults. Want to tackle that now?
+Windsurf: Based on memo — last session you migrated the database to PostgreSQL 16.
+          Open todo: update the connection pool config for pg16 defaults.
+          Want to tackle that now?
 ```
 
 ---
 
-## Manual inject
-
-Update the context block at any time:
+## Key commands
 
 ```sh
-memo inject --windsurf
+memo recap "<summary>"    # log end-of-session summary
+memo todo list            # see all open todos
+memo todo done <id>       # mark a todo as done
+memo bootstrap            # import recent git commits as memory entries
+memo inject --windsurf    # manually update .windsurfrules
+memo inject --all         # update all configured agent files at once
 ```
 
 ---
