@@ -495,33 +495,12 @@ dependencies = [
  "chrono",
  "clap",
  "colored",
- "memo-core",
- "memo-hooks",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "memo-core"
-version = "0.1.6"
-dependencies = [
- "anyhow",
- "chrono",
  "dirs",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
-]
-
-[[package]]
-name = "memo-hooks"
-version = "0.1.6"
-dependencies = [
- "anyhow",
- "chrono",
- "memo-core",
- "serde_json",
+ "tempfile",
 ]
 
 [[package]]

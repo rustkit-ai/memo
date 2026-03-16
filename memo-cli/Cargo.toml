@@ -14,13 +14,15 @@ name = "memo"
 path = "src/main.rs"
 
 [dependencies]
-memo-core = { path = "../memo-core", version = "0.1.5" }
-memo-hooks = { path = "../memo-hooks", version = "0.1.5" }
 clap = { workspace = true }
 anyhow = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 colored = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
+dirs = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

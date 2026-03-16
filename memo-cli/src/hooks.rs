@@ -1,6 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use memo_core::{Entry, Store};
+use crate::store::{Entry, Store};
 use std::fs;
 use std::path::Path;
 

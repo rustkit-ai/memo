@@ -1,8 +1,11 @@
+mod store;
+mod hooks;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use colored::Colorize;
-use memo_core::{Entry, Store, db_path_for, inject_marker_path};
-use memo_hooks::{inject_all, setup, write_to_claude_md, write_to_copilot_instructions, write_to_cursor_rules, write_to_vscode, write_to_windsurf_rules, InjectBlock};
+use store::{Entry, Store, db_path_for, inject_marker_path};
+use hooks::{inject_all, setup, write_to_claude_md, write_to_copilot_instructions, write_to_cursor_rules, write_to_vscode, write_to_windsurf_rules, InjectBlock};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -810,7 +813,7 @@ fn main() -> Result<()> {
         }
 
         Command::Bootstrap { limit, yes } => {
-            let commits = memo_core::git_log(&dir, limit);
+            let commits = store::git_log(&dir, limit);
             if commits.is_empty() {
                 println!("no git history found in this directory");
                 return Ok(());
