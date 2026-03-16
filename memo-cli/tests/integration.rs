@@ -34,7 +34,8 @@ fn run_memo_with_bin_on_path(home: &PathBuf, args: &[&str], bin_on_path: bool) -
     if bin_on_path {
         let bin_dir = bin.parent().expect("binary has parent dir");
         let path_env = std::env::var("PATH").unwrap_or_default();
-        let new_path = format!("{}:{}", bin_dir.display(), path_env);
+        let sep = if cfg!(windows) { ";" } else { ":" };
+        let new_path = format!("{}{sep}{}", bin_dir.display(), path_env);
         cmd.env("PATH", new_path);
     }
     cmd.output().expect("failed to run memo")

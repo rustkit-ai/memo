@@ -1020,7 +1020,7 @@ fn run_capture(dir: &Path) -> anyhow::Result<()> {
     let canonical_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let canonical_dir = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
     let rel = canonical_path.strip_prefix(&canonical_dir).unwrap_or(&canonical_path);
-    let file = rel.display().to_string();
+    let file = rel.display().to_string().replace('\\', "/");
 
     let log_msg = match tool_name {
         "Write" => {
