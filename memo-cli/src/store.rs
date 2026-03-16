@@ -17,13 +17,6 @@ pub struct Entry {
     pub pinned: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Session {
-    pub id: String,
-    pub started_at: DateTime<Utc>,
-    pub project_id: String,
-}
-
 pub struct Store {
     conn: Connection,
     pub project_id: String,

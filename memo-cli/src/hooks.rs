@@ -126,7 +126,6 @@ pub struct SetupResult {
     pub cursor_rules_written: bool,
     pub windsurf_rules_written: bool,
     pub copilot_instructions_written: bool,
-    pub vscode_instructions_written: bool,
     pub start_hook_installed: bool,
     pub post_tool_hook_installed: bool,
 }
@@ -157,15 +156,11 @@ pub fn setup(project_dir: &Path) -> Result<SetupResult> {
         write_to_copilot_instructions(&InjectBlock::empty(), project_dir)?;
     }
 
-    // VS Code uses the same file as GitHub Copilot
-    let vscode_instructions_written = copilot_instructions_written;
-
     Ok(SetupResult {
         claude_hook_installed,
         cursor_rules_written,
         windsurf_rules_written,
         copilot_instructions_written,
-        vscode_instructions_written,
         start_hook_installed,
         post_tool_hook_installed,
     })
