@@ -247,15 +247,25 @@ Full setup and usage details for each agent:
 
 ## Team
 
-`aimemo sync` reads and writes a `.aimemo/memory.json` file in your project directory. Commit that file and your whole team shares the same agent memory.
+AI agents on a team should share the same memory. `aimemo sync` reads and writes a `.aimemo/memory.json` file in your project directory. Commit that file and every developer's agent — regardless of which tool they use — starts with the team's shared context.
 
 ```sh
-aimemo sync                  # pull new entries from team + push yours
-aimemo sync --export-only    # only update the shared file
-aimemo sync --import-only    # only pull from the shared file
+aimemo sync                  # pull new entries from .aimemo/memory.json + push yours
+aimemo sync --export-only    # only write to .aimemo/memory.json (don't import)
+aimemo sync --import-only    # only import from .aimemo/memory.json (don't export)
 ```
 
-Each developer's local DB stays private. Only what's been synced ends up in `.aimemo/memory.json`.
+**Workflow:**
+
+1. Run `aimemo sync` before starting work — picks up what teammates logged
+2. Work normally — entries accumulate in your local DB
+3. Run `aimemo sync` before committing — exports your entries into `.aimemo/memory.json`
+4. Commit `.aimemo/memory.json` alongside your code changes
+
+Each developer's full local DB stays private. Only synced entries end up in the shared file. Duplicate detection is built in — running `sync` twice never creates duplicates.
+
+> **Add to `.gitignore`**: nothing — `.aimemo/memory.json` is meant to be committed.
+> **Add to `.gitignore`**: `.aimemo/*.db` if you want to keep local DBs private (they already live in `~/.local/share/aimemo/`, not in the repo).
 
 ---
 
@@ -314,7 +324,10 @@ Each developer's local DB stays private. Only what's been synced ends up in `.ai
 |---|---|
 | `aimemo export` | Export all entries to JSON (stdout) |
 | `aimemo export -o backup.json` | Export all entries to a file |
+| `aimemo export --format markdown` | Export as a Markdown document grouped by date |
+| `aimemo export --format markdown -o NOTES.md` | Write Markdown export to a file |
 | `aimemo import <file>` | Import entries from a JSON export |
+| `aimemo badge` | Print a shields.io badge for your README (last session date) |
 
 ### Team
 

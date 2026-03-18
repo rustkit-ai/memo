@@ -127,12 +127,18 @@ enum Command {
     /// Check aimemo health for this project
     Doctor,
 
-    /// Export memory entries to JSON
+    /// Export memory entries to JSON or Markdown
     Export {
         /// Output file (default: stdout)
         #[arg(long, short = 'o', value_name = "FILE")]
         output: Option<PathBuf>,
+        /// Output format: json (default) or markdown
+        #[arg(long, value_enum, default_value_t = ExportFormat::Json)]
+        format: ExportFormat,
     },
+
+    /// Print a shields.io badge for your README showing the last session date
+    Badge,
 
     /// Import memory entries from a JSON export file
     Import {
@@ -211,6 +217,12 @@ enum TodoAction {
 enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Clone, ValueEnum)]
+enum ExportFormat {
+    Json,
+    Markdown,
 }
 
 fn resolve_dir(cli_project: &Option<PathBuf>) -> Result<PathBuf> {
@@ -747,26 +759,50 @@ fn main() -> Result<()> {
             }
         }
 
-        Command::Export { output } => {
+        Command::Export { output, format } => {
             let store = Store::open(&dir)?;
             let entries = store.export_all()?;
-            let data = serde_json::json!({
-                "version": 1,
-                "project_id": store.project_id,
-                "entries": entries.iter().map(|e| serde_json::json!({
-                    "timestamp": e.timestamp.to_rfc3339(),
-                    "content": e.content,
-                    "tags": e.tags,
-                })).collect::<Vec<_>>(),
-            });
-            let json = serde_json::to_string_pretty(&data)?;
+            let content = match format {
+                ExportFormat::Json => {
+                    let data = serde_json::json!({
+                        "version": 1,
+                        "project_id": store.project_id,
+                        "entries": entries.iter().map(|e| serde_json::json!({
+                            "timestamp": e.timestamp.to_rfc3339(),
+                            "content": e.content,
+                            "tags": e.tags,
+                        })).collect::<Vec<_>>(),
+                    });
+                    serde_json::to_string_pretty(&data)?
+                }
+                ExportFormat::Markdown => render_export_markdown(&entries),
+            };
             match output {
-                Some(path) => {
-                    std::fs::write(&path, &json)?;
+                Some(ref path) => {
+                    std::fs::write(path, &content)?;
                     println!("exported {} entries to {}", entries.len(), path.display());
                 }
-                None => println!("{json}"),
+                None => println!("{content}"),
             }
+        }
+
+        Command::Badge => {
+            let store = Store::open(&dir)?;
+            let entries = store.export_all()?;
+            let date = entries
+                .iter()
+                .map(|e| e.timestamp)
+                .max()
+                .map(|ts| ts.format("%Y-%m-%d").to_string())
+                .unwrap_or_else(|| "never".to_string());
+            let label = "last%20session";
+            let message = date.replace('-', "--");
+            let color = "brightgreen";
+            let badge_url = format!("https://img.shields.io/badge/{label}-{message}-{color}");
+            println!("![last session]({badge_url})");
+            println!();
+            println!("# Update automatically with a git hook or CI step:");
+            println!("# aimemo badge > /tmp/badge.txt && sed -i 's|!\\[last session\\](.*)|'\"$(cat /tmp/badge.txt)\"'|' README.md");
         }
 
         Command::Import { file, yes } => {
@@ -1044,6 +1080,50 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Render entries as a Markdown document grouped by date.
+fn render_export_markdown(entries: &[store::Entry]) -> String {
+    use std::collections::BTreeMap;
+    use std::fmt::Write;
+
+    let mut by_date: BTreeMap<String, Vec<&store::Entry>> = BTreeMap::new();
+    for entry in entries {
+        let date = entry.timestamp.format("%Y-%m-%d").to_string();
+        by_date.entry(date).or_default().push(entry);
+    }
+
+    let mut out = String::new();
+    let now = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let _ = writeln!(out, "# aimemo export");
+    let _ = writeln!(out, "_Exported: {now} · {} entries_", entries.len());
+    let _ = writeln!(out);
+
+    // Most recent dates first
+    for (date, day_entries) in by_date.iter().rev() {
+        let _ = writeln!(out, "## {date}");
+        let _ = writeln!(out);
+        for entry in day_entries {
+            let content = &entry.content;
+            let tag_str = if entry.tags.is_empty() {
+                String::new()
+            } else {
+                format!(" _{}_", entry.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(", "))
+            };
+            let lower = content.to_ascii_lowercase();
+            if lower.starts_with("todo:") {
+                let _ = writeln!(out, "- **{content}**{tag_str}");
+            } else if lower.starts_with("recap:") {
+                let _ = writeln!(out, "- 📋 {content}{tag_str}");
+            } else {
+                let _ = writeln!(out, "- {content}{tag_str}");
+            }
+        }
+        let _ = writeln!(out);
+    }
+
+    let _ = write!(out, "_Generated by [aimemo](https://github.com/rustkit-ai/aimemo)_");
+    out
 }
 
 /// Read a PostToolUse JSON payload from stdin and auto-log modified files.

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.11] - 2026-03-18
+
+### Added
+- `aimemo export --format markdown` — export memory as a Markdown document grouped by date, with todos in bold and recaps flagged with 📋
+- `aimemo badge` — prints a shields.io static badge for your README showing the last session date, with an example update command for CI / git hooks
+- Improved `sync` documentation in README: step-by-step team workflow, duplicate detection note, gitignore guidance
+
 ## [0.1.8] - 2026-03-16
 
 ### Changed
